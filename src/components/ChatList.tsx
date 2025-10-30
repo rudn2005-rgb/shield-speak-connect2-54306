@@ -50,14 +50,14 @@ const ChatList = ({ onSelectChat, selectedChatId }: ChatListProps) => {
       )
       .subscribe();
 
-    const messagesChannel = supabase
-      .channel("messages-updates")
+    const membersChannel = supabase
+      .channel("members-changes")
       .on(
         "postgres_changes",
         {
-          event: "INSERT",
+          event: "*",
           schema: "public",
-          table: "messages",
+          table: "chat_members",
         },
         () => {
           loadChats();
@@ -66,7 +66,7 @@ const ChatList = ({ onSelectChat, selectedChatId }: ChatListProps) => {
       .subscribe();
 
     const profilesChannel = supabase
-      .channel("profiles-updates")
+      .channel("profiles-status")
       .on(
         "postgres_changes",
         {
@@ -82,7 +82,7 @@ const ChatList = ({ onSelectChat, selectedChatId }: ChatListProps) => {
 
     return () => {
       supabase.removeChannel(chatsChannel);
-      supabase.removeChannel(messagesChannel);
+      supabase.removeChannel(membersChannel);
       supabase.removeChannel(profilesChannel);
     };
   }, []);

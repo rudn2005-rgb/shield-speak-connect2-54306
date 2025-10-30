@@ -30,6 +30,8 @@ const Messenger = () => {
         navigate("/auth");
       } else {
         setCurrentUserId(session.user.id);
+        // Обновляем статус на "online" при входе
+        updateUserStatus(session.user.id, "online");
       }
     });
 
@@ -39,12 +41,42 @@ const Messenger = () => {
           navigate("/auth");
         } else {
           setCurrentUserId(session.user.id);
+          updateUserStatus(session.user.id, "online");
         }
       }
     );
 
-    return () => subscription.unsubscribe();
+    // Обновляем статус на "offline" при закрытии страницы
+    const handleBeforeUnload = () => {
+      if (currentUserId) {
+        updateUserStatus(currentUserId, "offline");
+      }
+    };
+    
+    window.addEventListener("beforeunload", handleBeforeUnload);
+
+    return () => {
+      subscription.unsubscribe();
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+      if (currentUserId) {
+        updateUserStatus(currentUserId, "offline");
+      }
+    };
   }, [navigate]);
+
+  const updateUserStatus = async (userId: string, status: "online" | "offline") => {
+    try {
+      await supabase
+        .from("profiles")
+        .update({ 
+          status,
+          last_seen: new Date().toISOString()
+        })
+        .eq("id", userId);
+    } catch (error) {
+      console.error("Error updating status:", error);
+    }
+  };
 
   useEffect(() => {
     if (!currentUserId) return;

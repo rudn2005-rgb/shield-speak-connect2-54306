@@ -29,8 +29,8 @@ const ChatWindow = ({ chatId }: ChatWindowProps) => {
   const [loading, setLoading] = useState(true);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [chatName, setChatName] = useState("");
-  const [isOnline, setIsOnline] = useState(false);
   const [otherUserId, setOtherUserId] = useState<string | null>(null);
+  const [isOnline, setIsOnline] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -58,26 +58,26 @@ const ChatWindow = ({ chatId }: ChatWindowProps) => {
     };
   }, [chatId]);
 
-  // Отслеживаем статус другого пользователя
+  // Отслеживание онлайн статуса собеседника
   useEffect(() => {
     if (!otherUserId) return;
 
-    const loadUserStatus = async () => {
+    const loadStatus = async () => {
       const { data } = await supabase
         .from("profiles")
         .select("status")
         .eq("id", otherUserId)
         .single();
-
+      
       if (data) {
         setIsOnline(data.status === "online");
       }
     };
 
-    loadUserStatus();
+    loadStatus();
 
     const statusChannel = supabase
-      .channel(`user-status-${otherUserId}`)
+      .channel(`status-${otherUserId}`)
       .on(
         "postgres_changes",
         {
@@ -87,9 +87,7 @@ const ChatWindow = ({ chatId }: ChatWindowProps) => {
           filter: `id=eq.${otherUserId}`,
         },
         (payload: any) => {
-          if (payload.new) {
-            setIsOnline(payload.new.status === "online");
-          }
+          setIsOnline(payload.new.status === "online");
         }
       )
       .subscribe();
@@ -129,7 +127,6 @@ const ChatWindow = ({ chatId }: ChatWindowProps) => {
 
         if (members) {
           setOtherUserId(members.user_id);
-          
           const { data: profile } = await (supabase as any)
             .from("profiles")
             .select("display_name, status")
