@@ -164,7 +164,27 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      public_profile_search: {
+        Row: {
+          avatar_url: string | null
+          display_name: string | null
+          id: string | null
+          username: string | null
+        }
+        Insert: {
+          avatar_url?: string | null
+          display_name?: string | null
+          id?: string | null
+          username?: string | null
+        }
+        Update: {
+          avatar_url?: string | null
+          display_name?: string | null
+          id?: string | null
+          username?: string | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       create_chat_with_members: {
