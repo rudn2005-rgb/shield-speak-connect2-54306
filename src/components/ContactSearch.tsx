@@ -14,8 +14,8 @@ const searchSchema = z.string()
 interface Profile {
   id: string;
   username: string | null;
-  phone_number: string | null;
   avatar_url: string | null;
+  display_name: string | null;
 }
 
 interface ContactSearchProps {
@@ -64,10 +64,11 @@ const ContactSearch = ({ onSelectContact, currentUserId }: ContactSearchProps) =
         // Escape special characters for ILIKE pattern matching
         const escapedQuery = validatedQuery.replace(/[%_]/g, '\\$&');
         
+        // Use public search view to prevent PII exposure during search
         const { data, error } = await supabase
-          .from("profiles")
-          .select("id, username, phone_number, avatar_url")
-          .or(`username.ilike.%${escapedQuery}%,phone_number.ilike.%${escapedQuery}%`)
+          .from("public_profile_search")
+          .select("id, username, avatar_url, display_name")
+          .ilike("username", `%${escapedQuery}%`)
           .neq("id", currentUserId)
           .limit(10);
 
@@ -94,7 +95,7 @@ const ContactSearch = ({ onSelectContact, currentUserId }: ContactSearchProps) =
       <div className="relative">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
         <Input
-          placeholder="Поиск по имени или номеру телефона..."
+          placeholder="Поиск по имени пользователя..."
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
           className="pl-9"
@@ -126,13 +127,8 @@ const ContactSearch = ({ onSelectContact, currentUserId }: ContactSearchProps) =
                     </Avatar>
                     <div className="flex-1 text-left">
                       <p className="font-medium">
-                        {profile.username || "Без имени"}
+                        {profile.display_name || profile.username || "Без имени"}
                       </p>
-                      {profile.phone_number && (
-                        <p className="text-sm text-muted-foreground">
-                          {profile.phone_number}
-                        </p>
-                      )}
                       {alreadyRequested && (
                         <p className="text-xs text-muted-foreground mt-1">
                           Запрос отправлен
