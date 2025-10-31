@@ -191,6 +191,10 @@ export type Database = {
         Args: { is_group_chat?: boolean; other_user_id: string }
         Returns: string
       }
+      users_share_chat: {
+        Args: { _profile_id: string; _user_id: string }
+        Returns: boolean
+      }
     }
     Enums: {
       [_ in never]: never
