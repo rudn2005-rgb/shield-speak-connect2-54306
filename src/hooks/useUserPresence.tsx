@@ -19,35 +19,19 @@ export const useUserPresence = (userId: string | null) => {
       }
     };
 
-    // Устанавливаем статус "онлайн" при монтировании
+    // Set status to "online" when component mounts
     updateStatus("online");
 
-    // Обновляем статус каждые 30 секунд
+    // Update status every 30 seconds to maintain online presence
     const interval = setInterval(() => {
       updateStatus("online");
     }, 30000);
 
-    // Обработчик закрытия страницы
-    const handleBeforeUnload = () => {
-      // Используем sendBeacon для надежной отправки при закрытии
-      const data = {
-        id: userId,
-        status: "offline",
-        last_seen: new Date().toISOString()
-      };
-      
-      navigator.sendBeacon(
-        `${import.meta.env.VITE_SUPABASE_URL}/rest/v1/profiles?id=eq.${userId}`,
-        JSON.stringify(data)
-      );
-    };
-
-    // Устанавливаем статус "оффлайн" при размонтировании
-    window.addEventListener("beforeunload", handleBeforeUnload);
-
+    // Set status to "offline" on cleanup
+    // Note: beforeunload events with sendBeacon cannot include authentication headers,
+    // so we rely on the 30-second heartbeat timeout to eventually mark users as offline
     return () => {
       clearInterval(interval);
-      window.removeEventListener("beforeunload", handleBeforeUnload);
       updateStatus("offline");
     };
   }, [userId]);

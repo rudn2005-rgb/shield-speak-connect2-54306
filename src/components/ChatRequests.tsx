@@ -6,6 +6,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { User, Check, X, Clock } from "lucide-react";
 import { toast } from "sonner";
+import { getUserFriendlyError } from "@/lib/errorHandler";
 
 interface Profile {
   id: string;
@@ -120,26 +121,16 @@ const ChatRequests = ({ currentUserId, onRequestAccepted }: ChatRequestsProps) =
   const acceptRequest = async (requestId: string, senderId: string) => {
     setLoading(true);
     try {
-      // Создаем чат
-      const { data: newChat, error: chatError } = await supabase
-        .from("chats")
-        .insert({ is_group: false })
-        .select()
-        .single();
+      // Use secure database function to create chat with both members
+      const { data: newChatId, error: chatError } = await supabase
+        .rpc("create_chat_with_members", {
+          other_user_id: senderId,
+          is_group_chat: false,
+        });
 
       if (chatError) throw chatError;
 
-      // Добавляем участников
-      const { error: membersError } = await supabase
-        .from("chat_members")
-        .insert([
-          { chat_id: newChat.id, user_id: currentUserId },
-          { chat_id: newChat.id, user_id: senderId },
-        ]);
-
-      if (membersError) throw membersError;
-
-      // Обновляем статус запроса
+      // Update request status to accepted
       const { error: updateError } = await supabase
         .from("chat_requests")
         .update({ status: "accepted" })
@@ -150,8 +141,7 @@ const ChatRequests = ({ currentUserId, onRequestAccepted }: ChatRequestsProps) =
       toast.success("Запрос принят, чат создан!");
       onRequestAccepted();
     } catch (error: any) {
-      toast.error(error.message || "Ошибка принятия запроса");
-      console.error(error);
+      toast.error(getUserFriendlyError(error));
     } finally {
       setLoading(false);
     }
@@ -168,7 +158,7 @@ const ChatRequests = ({ currentUserId, onRequestAccepted }: ChatRequestsProps) =
       if (error) throw error;
       toast.success("Запрос отклонен");
     } catch (error: any) {
-      toast.error(error.message || "Ошибка отклонения запроса");
+      toast.error(getUserFriendlyError(error));
     } finally {
       setLoading(false);
     }
@@ -185,7 +175,7 @@ const ChatRequests = ({ currentUserId, onRequestAccepted }: ChatRequestsProps) =
       if (error) throw error;
       toast.success("Запрос отменен");
     } catch (error: any) {
-      toast.error(error.message || "Ошибка отмены запроса");
+      toast.error(getUserFriendlyError(error));
     } finally {
       setLoading(false);
     }

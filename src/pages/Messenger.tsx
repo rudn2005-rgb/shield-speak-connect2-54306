@@ -11,6 +11,7 @@ import ChatRequests from "@/components/ChatRequests";
 import { useUserPresence } from "@/hooks/useUserPresence";
 import { LogOut, Plus, Shield, MessageCircle, Bell } from "lucide-react";
 import { toast } from "sonner";
+import { getUserFriendlyError } from "@/lib/errorHandler";
 
 const Messenger = () => {
   const navigate = useNavigate();
@@ -185,8 +186,7 @@ const Messenger = () => {
       setIsDialogOpen(false);
       toast.success("Запрос отправлен! Ожидайте подтверждения.");
     } catch (error: any) {
-      toast.error(error.message || "Ошибка отправки запроса");
-      console.error(error);
+      toast.error(getUserFriendlyError(error));
     } finally {
       setLoading(false);
     }

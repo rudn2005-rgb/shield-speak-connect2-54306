@@ -167,7 +167,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      create_chat_with_members: {
+        Args: { is_group_chat?: boolean; other_user_id: string }
+        Returns: string
+      }
     }
     Enums: {
       [_ in never]: never

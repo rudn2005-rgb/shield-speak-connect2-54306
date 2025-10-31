@@ -6,6 +6,27 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { Shield, Lock } from "lucide-react";
+import { z } from "zod";
+import { getUserFriendlyError } from "@/lib/errorHandler";
+
+// Input validation schemas
+const authSchema = z.object({
+  email: z.string()
+    .email("Неверный формат email")
+    .max(255, "Email слишком длинный"),
+  password: z.string()
+    .min(8, "Пароль должен быть минимум 8 символов")
+    .max(128, "Пароль слишком длинный"),
+  displayName: z.string()
+    .min(2, "Имя должно быть минимум 2 символа")
+    .max(50, "Имя должно быть максимум 50 символов")
+    .regex(/^[a-zA-Zа-яА-ЯёЁ\s-]+$/, "Недопустимые символы в имени")
+    .optional(),
+  phoneNumber: z.string()
+    .regex(/^\+?[0-9]{10,15}$/, "Неверный формат номера телефона")
+    .transform(phone => phone.replace(/[^+0-9]/g, ''))
+    .optional(),
+});
 
 const Auth = () => {
   const navigate = useNavigate();
@@ -39,21 +60,33 @@ const Auth = () => {
     setLoading(true);
 
     try {
+      // Validate inputs
+      const validationData = {
+        email: email.trim(),
+        password,
+        ...(isLogin ? {} : {
+          displayName: displayName.trim(),
+          phoneNumber: phoneNumber.trim(),
+        }),
+      };
+
+      const validated = authSchema.parse(validationData);
+
       if (isLogin) {
         const { error } = await supabase.auth.signInWithPassword({
-          email,
-          password,
+          email: validated.email,
+          password: validated.password,
         });
         if (error) throw error;
         toast.success("Вход выполнен успешно!");
       } else {
         const { error } = await supabase.auth.signUp({
-          email,
-          password,
+          email: validated.email,
+          password: validated.password,
           options: {
             data: {
-              username: displayName,
-              phone_number: phoneNumber,
+              username: validated.displayName,
+              phone_number: validated.phoneNumber,
             },
             emailRedirectTo: `${window.location.origin}/`,
           },
@@ -62,7 +95,11 @@ const Auth = () => {
         toast.success("Регистрация выполнена! Входим в систему...");
       }
     } catch (error: any) {
-      toast.error(error.message || "Произошла ошибка");
+      if (error instanceof z.ZodError) {
+        toast.error(error.errors[0].message);
+      } else {
+        toast.error(getUserFriendlyError(error));
+      }
     } finally {
       setLoading(false);
     }
@@ -153,8 +190,13 @@ const Auth = () => {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
-                minLength={6}
+                minLength={8}
               />
+              {!isLogin && (
+                <p className="text-xs text-muted-foreground">
+                  Минимум 8 символов
+                </p>
+              )}
             </div>
 
             <Button

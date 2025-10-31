@@ -4,6 +4,12 @@ import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Search, User } from "lucide-react";
+import { z } from "zod";
+
+// Input validation schema for search queries
+const searchSchema = z.string()
+  .max(50, "Поисковый запрос слишком длинный")
+  .regex(/^[a-zA-Zа-яА-ЯёЁ0-9@.\-+\s]*$/, "Недопустимые символы в запросе");
 
 interface Profile {
   id: string;
@@ -52,17 +58,27 @@ const ContactSearch = ({ onSelectContact, currentUserId }: ContactSearchProps) =
 
       setLoading(true);
       try {
+        // Validate input
+        const validatedQuery = searchSchema.parse(searchQuery.trim());
+        
+        // Escape special characters for ILIKE pattern matching
+        const escapedQuery = validatedQuery.replace(/[%_]/g, '\\$&');
+        
         const { data, error } = await supabase
           .from("profiles")
           .select("id, username, phone_number, avatar_url")
-          .or(`username.ilike.%${searchQuery}%,phone_number.ilike.%${searchQuery}%`)
+          .or(`username.ilike.%${escapedQuery}%,phone_number.ilike.%${escapedQuery}%`)
           .neq("id", currentUserId)
           .limit(10);
 
         if (error) throw error;
         setResults(data || []);
       } catch (error) {
-        console.error("Search error:", error);
+        if (error instanceof z.ZodError) {
+          console.error("Invalid search input:", error.errors[0].message);
+        } else {
+          console.error("Search error:", error);
+        }
         setResults([]);
       } finally {
         setLoading(false);
