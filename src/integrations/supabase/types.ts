@@ -195,15 +195,6 @@ export type Database = {
         Args: { _chat_id: string; _user_id: string }
         Returns: boolean
       }
-      search_public_profiles: {
-        Args: { search_username: string }
-        Returns: {
-          avatar_url: string
-          display_name: string
-          id: string
-          username: string
-        }[]
-      }
       users_share_chat: {
         Args: { _profile_id: string; _user_id: string }
         Returns: boolean
