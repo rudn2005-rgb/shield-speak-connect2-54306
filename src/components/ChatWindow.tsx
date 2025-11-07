@@ -18,6 +18,24 @@ const messageSchema = z.string()
   .refine(
     (msg) => !/[\x00-\x08\x0B-\x0C\x0E-\x1F]/.test(msg),
     "Сообщение содержит недопустимые символы"
+  )
+  .refine(
+    (msg) => !/<script|<iframe|javascript:|onerror=|onload=/i.test(msg),
+    "Сообщение содержит потенциально опасный контент"
+  )
+  .refine(
+    (msg) => {
+      // Prevent HTML entity injection
+      const htmlEntityPattern = /&#x?[0-9a-f]+;|&[a-z]+;/i;
+      const entities = msg.match(new RegExp(htmlEntityPattern, 'gi'));
+      if (entities) {
+        // Allow common safe entities only
+        const safeEntities = ['&amp;', '&lt;', '&gt;', '&quot;', '&#39;'];
+        return entities.every(entity => safeEntities.includes(entity.toLowerCase()));
+      }
+      return true;
+    },
+    "Сообщение содержит подозрительные HTML-сущности"
   );
 
 interface Message {
