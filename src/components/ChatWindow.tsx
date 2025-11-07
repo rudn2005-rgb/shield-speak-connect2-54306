@@ -201,10 +201,49 @@ const ChatWindow = ({ chatId }: ChatWindowProps) => {
       );
 
       setMessages(messagesWithSenders);
+      
+      // Помечаем все непрочитанные сообщения как прочитанные
+      await markMessagesAsRead(messagesData);
     } catch (error) {
       console.error("Error loading messages:", error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const markMessagesAsRead = async (messages: any[]) => {
+    if (!currentUserId) return;
+
+    try {
+      // Получаем сообщения, которые не отправлены текущим пользователем
+      const otherUserMessages = messages.filter(m => m.sender_id !== currentUserId);
+      
+      if (otherUserMessages.length === 0) return;
+
+      // Получаем уже прочитанные сообщения
+      const { data: existingReads } = await (supabase as any)
+        .from("message_reads")
+        .select("message_id")
+        .in("message_id", otherUserMessages.map(m => m.id))
+        .eq("user_id", currentUserId);
+
+      const readMessageIds = new Set(existingReads?.map((r: any) => r.message_id) || []);
+      
+      // Отмечаем непрочитанные сообщения
+      const unreadMessages = otherUserMessages.filter(m => !readMessageIds.has(m.id));
+      
+      if (unreadMessages.length > 0) {
+        const readRecords = unreadMessages.map(m => ({
+          message_id: m.id,
+          user_id: currentUserId
+        }));
+
+        await (supabase as any)
+          .from("message_reads")
+          .insert(readRecords);
+      }
+    } catch (error) {
+      console.error("Error marking messages as read:", error);
     }
   };
 

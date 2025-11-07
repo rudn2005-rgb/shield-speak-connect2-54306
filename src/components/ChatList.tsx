@@ -12,6 +12,7 @@ interface Chat {
   is_group: boolean;
   avatar_url: string | null;
   updated_at: string;
+  unread_count?: number;
   other_user?: {
     display_name: string;
     avatar_url: string | null;
@@ -65,6 +66,36 @@ const ChatList = ({ onSelectChat, selectedChatId }: ChatListProps) => {
       )
       .subscribe();
 
+    const messagesChannel = supabase
+      .channel("messages-list")
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "messages",
+        },
+        () => {
+          loadChats();
+        }
+      )
+      .subscribe();
+
+    const readsChannel = supabase
+      .channel("reads-changes")
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "message_reads",
+        },
+        () => {
+          loadChats();
+        }
+      )
+      .subscribe();
+
     const profilesChannel = supabase
       .channel("profiles-status")
       .on(
@@ -84,6 +115,8 @@ const ChatList = ({ onSelectChat, selectedChatId }: ChatListProps) => {
       supabase.removeChannel(chatsChannel);
       supabase.removeChannel(membersChannel);
       supabase.removeChannel(profilesChannel);
+      supabase.removeChannel(messagesChannel);
+      supabase.removeChannel(readsChannel);
     };
   }, []);
 
@@ -127,7 +160,7 @@ const ChatList = ({ onSelectChat, selectedChatId }: ChatListProps) => {
                 .single();
 
               if (profile) {
-                return { ...chat, other_user: profile };
+                chat.other_user = profile;
               }
             }
           }
@@ -140,7 +173,35 @@ const ChatList = ({ onSelectChat, selectedChatId }: ChatListProps) => {
             .limit(1)
             .single();
 
-          return { ...chat, last_message: lastMessage };
+          if (lastMessage) {
+            chat.last_message = lastMessage;
+          }
+
+          // Подсчет непрочитанных сообщений
+          const { data: messages } = await (supabase as any)
+            .from("messages")
+            .select("id")
+            .eq("chat_id", chat.id)
+            .neq("sender_id", user.id);
+
+          if (messages && messages.length > 0) {
+            const messageIds = messages.map((m: any) => m.id);
+            
+            const { data: readMessages } = await (supabase as any)
+              .from("message_reads")
+              .select("message_id")
+              .in("message_id", messageIds)
+              .eq("user_id", user.id);
+
+            const readMessageIds = new Set(readMessages?.map((r: any) => r.message_id) || []);
+            const unreadCount = messages.filter((m: any) => !readMessageIds.has(m.id)).length;
+            
+            chat.unread_count = unreadCount;
+          } else {
+            chat.unread_count = 0;
+          }
+
+          return chat;
         })
       );
 
@@ -203,14 +264,21 @@ const ChatList = ({ onSelectChat, selectedChatId }: ChatListProps) => {
             <div className="flex-1 min-w-0 text-left">
               <div className="flex items-center justify-between mb-1">
                 <h3 className="font-semibold truncate">{displayName}</h3>
-                {chat.last_message && (
-                  <span className="text-xs text-muted-foreground">
-                    {formatDistanceToNow(new Date(chat.last_message.created_at), {
-                      addSuffix: true,
-                      locale: ru,
-                    })}
-                  </span>
-                )}
+                <div className="flex items-center gap-2">
+                  {chat.last_message && (
+                    <span className="text-xs text-muted-foreground">
+                      {formatDistanceToNow(new Date(chat.last_message.created_at), {
+                        addSuffix: true,
+                        locale: ru,
+                      })}
+                    </span>
+                  )}
+                  {chat.unread_count && chat.unread_count > 0 && (
+                    <Badge variant="default" className="ml-auto rounded-full h-5 min-w-5 flex items-center justify-center px-1.5">
+                      {chat.unread_count > 99 ? '99+' : chat.unread_count}
+                    </Badge>
+                  )}
+                </div>
               </div>
               {chat.last_message && (
                 <p className="text-sm text-muted-foreground truncate">
