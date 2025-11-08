@@ -9,6 +9,7 @@ import { ru } from "date-fns/locale";
 import { toast } from "sonner";
 import { z } from "zod";
 import { getUserFriendlyError } from "@/lib/errorHandler";
+import { isUserOnline } from "@/utils/userStatus";
 import VideoCall from "./VideoCall";
 import IncomingCallNotification from "./IncomingCallNotification";
 
@@ -61,7 +62,7 @@ const ChatWindow = ({ chatId }: ChatWindowProps) => {
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [chatName, setChatName] = useState<string | null>(null);
   const [otherUserId, setOtherUserId] = useState<string | null>(null);
-  const [isOnline, setIsOnline] = useState(false);
+  const [otherUserStatus, setOtherUserStatus] = useState<{status: string | null, lastSeen: string | null}>({status: null, lastSeen: null});
   const [isVideoCallOpen, setIsVideoCallOpen] = useState(false);
   const [isIncomingCall, setIsIncomingCall] = useState(false);
   const [incomingCallFrom, setIncomingCallFrom] = useState<string | null>(null);
@@ -100,12 +101,15 @@ const ChatWindow = ({ chatId }: ChatWindowProps) => {
     const loadStatus = async () => {
       const { data } = await supabase
         .from("profiles")
-        .select("status")
+        .select("status, last_seen")
         .eq("id", otherUserId)
         .single();
       
       if (data) {
-        setIsOnline(data.status === "online");
+        setOtherUserStatus({
+          status: data.status,
+          lastSeen: data.last_seen
+        });
       }
     };
 
@@ -122,7 +126,10 @@ const ChatWindow = ({ chatId }: ChatWindowProps) => {
           filter: `id=eq.${otherUserId}`,
         },
         (payload: any) => {
-          setIsOnline(payload.new.status === "online");
+          setOtherUserStatus({
+            status: payload.new.status,
+            lastSeen: payload.new.last_seen
+          });
         }
       )
       .subscribe();
@@ -190,13 +197,16 @@ const ChatWindow = ({ chatId }: ChatWindowProps) => {
           setOtherUserId(members.user_id);
           const { data: profile } = await (supabase as any)
             .from("profiles")
-            .select("display_name, status")
+            .select("display_name, status, last_seen")
             .eq("id", members.user_id)
             .single();
 
           if (profile) {
             setChatName(profile.display_name);
-            setIsOnline(profile.status === "online");
+            setOtherUserStatus({
+              status: profile.status,
+              lastSeen: profile.last_seen
+            });
           }
         }
       } else if (chat) {
@@ -326,7 +336,7 @@ const ChatWindow = ({ chatId }: ChatWindowProps) => {
           <div>
             <h2 className="font-semibold">{chatName || "Неизвестный контакт"}</h2>
             <p className="text-xs text-muted-foreground">
-              {isOnline ? "онлайн" : "не в сети"}
+              {isUserOnline(otherUserStatus.lastSeen, otherUserStatus.status) ? "онлайн" : "не в сети"}
             </p>
           </div>
         </div>

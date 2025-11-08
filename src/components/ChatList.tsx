@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { formatDistanceToNow } from "date-fns";
 import { ru } from "date-fns/locale";
 import { MessageCircle } from "lucide-react";
+import { isUserOnline } from "@/utils/userStatus";
 
 interface Chat {
   id: string;
@@ -17,6 +18,7 @@ interface Chat {
     display_name: string;
     avatar_url: string | null;
     status: string;
+    last_seen: string | null;
   };
   last_message?: {
     content: string;
@@ -155,7 +157,7 @@ const ChatList = ({ onSelectChat, selectedChatId }: ChatListProps) => {
             if (members) {
               const { data: profile } = await (supabase as any)
                 .from("profiles")
-                .select("display_name, avatar_url, status")
+                .select("display_name, avatar_url, status, last_seen")
                 .eq("id", members.user_id)
                 .single();
 
@@ -239,7 +241,9 @@ const ChatList = ({ onSelectChat, selectedChatId }: ChatListProps) => {
         const displayName = chat.is_group
           ? chat.name
           : chat.other_user?.display_name || "Unknown";
-        const isOnline = chat.other_user?.status === "online";
+        const isOnline = chat.other_user 
+          ? isUserOnline(chat.other_user.last_seen, chat.other_user.status)
+          : false;
 
         return (
           <button
