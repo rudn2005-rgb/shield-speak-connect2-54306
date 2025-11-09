@@ -11,6 +11,7 @@ import { z } from "zod";
 import { getUserFriendlyError } from "@/lib/errorHandler";
 import { isUserOnline } from "@/utils/userStatus";
 import VideoCall from "./VideoCall";
+import AudioCall from "./AudioCall";
 import IncomingCallNotification from "./IncomingCallNotification";
 
 const messageSchema = z.string()
@@ -64,8 +65,10 @@ const ChatWindow = ({ chatId }: ChatWindowProps) => {
   const [otherUserId, setOtherUserId] = useState<string | null>(null);
   const [otherUserStatus, setOtherUserStatus] = useState<{status: string | null, lastSeen: string | null}>({status: null, lastSeen: null});
   const [isVideoCallOpen, setIsVideoCallOpen] = useState(false);
+  const [isAudioCallOpen, setIsAudioCallOpen] = useState(false);
   const [isIncomingCall, setIsIncomingCall] = useState(false);
   const [incomingCallFrom, setIncomingCallFrom] = useState<string | null>(null);
+  const [incomingCallType, setIncomingCallType] = useState<"video" | "audio">("video");
   const [isCallInitiator, setIsCallInitiator] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -147,6 +150,7 @@ const ChatWindow = ({ chatId }: ChatWindowProps) => {
             .single();
           
           setIncomingCallFrom(profile?.display_name || "Неизвестный");
+          setIncomingCallType(payload.type || "video");
           setIsIncomingCall(true);
         }
       })
@@ -155,6 +159,7 @@ const ChatWindow = ({ chatId }: ChatWindowProps) => {
         if (payload.to === currentUserId) {
           toast.error("Звонок отклонен");
           setIsVideoCallOpen(false);
+          setIsAudioCallOpen(false);
         }
       })
       .subscribe();
@@ -345,7 +350,29 @@ const ChatWindow = ({ chatId }: ChatWindowProps) => {
           <Button 
             variant="ghost" 
             size="icon"
-            onClick={() => toast.info("Голосовые звонки будут доступны в следующей версии")}
+            onClick={async () => {
+              if (!otherUserId || !currentUserId) {
+                toast.error("Не удалось определить собеседника");
+                return;
+              }
+              
+              // Отправляем уведомление о голосовом звонке
+              const notificationChannel = supabase.channel(`call-notifications-${otherUserId}`);
+              await notificationChannel.send({
+                type: "broadcast",
+                event: "incoming-call",
+                payload: {
+                  from: currentUserId,
+                  to: otherUserId,
+                  chatId: chatId,
+                  type: "audio",
+                },
+              });
+              
+              setIsCallInitiator(true);
+              setIsAudioCallOpen(true);
+              toast.info("Звонок...");
+            }}
           >
             <Phone className="w-5 h-5" />
           </Button>
@@ -358,7 +385,7 @@ const ChatWindow = ({ chatId }: ChatWindowProps) => {
                 return;
               }
               
-              // Отправляем уведомление о звонке
+              // Отправляем уведомление о видеозвонке
               const notificationChannel = supabase.channel(`call-notifications-${otherUserId}`);
               await notificationChannel.send({
                 type: "broadcast",
@@ -367,6 +394,7 @@ const ChatWindow = ({ chatId }: ChatWindowProps) => {
                   from: currentUserId,
                   to: otherUserId,
                   chatId: chatId,
+                  type: "video",
                 },
               });
               
@@ -444,12 +472,16 @@ const ChatWindow = ({ chatId }: ChatWindowProps) => {
 
       {isIncomingCall && incomingCallFrom && currentUserId && otherUserId && (
         <IncomingCallNotification
-          callerName={incomingCallFrom}
+          callerName={`${incomingCallFrom} (${incomingCallType === "audio" ? "голосовой" : "видео"})`}
           onAccept={() => {
             console.log("Accepting call from:", incomingCallFrom);
             setIsIncomingCall(false);
             setIsCallInitiator(false);
-            setIsVideoCallOpen(true);
+            if (incomingCallType === "audio") {
+              setIsAudioCallOpen(true);
+            } else {
+              setIsVideoCallOpen(true);
+            }
           }}
           onDecline={async () => {
             console.log("Declining call from:", incomingCallFrom);
@@ -473,17 +505,32 @@ const ChatWindow = ({ chatId }: ChatWindowProps) => {
       )}
 
       {currentUserId && otherUserId && (
-        <VideoCall
-          isOpen={isVideoCallOpen}
-          onClose={() => {
-            setIsVideoCallOpen(false);
-            setIsCallInitiator(false);
-          }}
-          chatId={chatId}
-          currentUserId={currentUserId}
-          otherUserId={otherUserId}
-          isInitiator={isCallInitiator}
-        />
+        <>
+          <VideoCall
+            isOpen={isVideoCallOpen}
+            onClose={() => {
+              setIsVideoCallOpen(false);
+              setIsCallInitiator(false);
+            }}
+            chatId={chatId}
+            currentUserId={currentUserId}
+            otherUserId={otherUserId}
+            isInitiator={isCallInitiator}
+          />
+          
+          <AudioCall
+            isOpen={isAudioCallOpen}
+            onClose={() => {
+              setIsAudioCallOpen(false);
+              setIsCallInitiator(false);
+            }}
+            chatId={chatId}
+            currentUserId={currentUserId}
+            otherUserId={otherUserId}
+            otherUserName={chatName || "Неизвестный"}
+            isInitiator={isCallInitiator}
+          />
+        </>
       )}
     </div>
   );

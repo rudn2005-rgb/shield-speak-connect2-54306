@@ -2,29 +2,28 @@ import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Phone, PhoneOff, Mic, MicOff, Video as VideoIcon, VideoOff } from "lucide-react";
+import { Phone, PhoneOff, Mic, MicOff } from "lucide-react";
 import { toast } from "sonner";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 
-interface VideoCallProps {
+interface AudioCallProps {
   isOpen: boolean;
   onClose: () => void;
   chatId: string;
   currentUserId: string;
   otherUserId: string;
+  otherUserName: string;
   isInitiator: boolean;
 }
 
-const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, isInitiator }: VideoCallProps) => {
+const AudioCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, otherUserName, isInitiator }: AudioCallProps) => {
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
-  const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
   const [peerConnection, setPeerConnection] = useState<RTCPeerConnection | null>(null);
   const [isMuted, setIsMuted] = useState(false);
-  const [isVideoOff, setIsVideoOff] = useState(false);
   const [callStatus, setCallStatus] = useState<"connecting" | "connected" | "ended">("connecting");
   const [callDuration, setCallDuration] = useState(0);
-
-  const localVideoRef = useRef<HTMLVideoElement>(null);
-  const remoteVideoRef = useRef<HTMLVideoElement>(null);
+  
+  const audioRef = useRef<HTMLAudioElement>(null);
   const channelRef = useRef<any>(null);
   const callTimerRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -39,7 +38,7 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, isInit
   useEffect(() => {
     if (!isOpen) return;
 
-    console.log("VideoCall opened, isInitiator:", isInitiator);
+    console.log("AudioCall opened, isInitiator:", isInitiator);
     initializeCall();
 
     return () => {
@@ -73,18 +72,20 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, isInit
 
   const initializeCall = async () => {
     try {
-      console.log("Initializing call, requesting media access...");
-      // Получаем доступ к камере и микрофону
+      console.log("Initializing audio call, requesting microphone access...");
+      
+      // Получаем доступ только к микрофону
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: true,
-        audio: true,
+        video: false,
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        },
       });
       
-      console.log("Media access granted, got stream:", stream.id);
+      console.log("Microphone access granted, got stream:", stream.id);
       setLocalStream(stream);
-      if (localVideoRef.current) {
-        localVideoRef.current.srcObject = stream;
-      }
 
       // Создаем peer connection
       const pc = new RTCPeerConnection(configuration);
@@ -93,17 +94,16 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, isInit
 
       // Добавляем локальные треки
       stream.getTracks().forEach((track) => {
-        console.log("Adding track:", track.kind);
+        console.log("Adding audio track");
         pc.addTrack(track, stream);
       });
 
       // Обрабатываем входящие треки
       pc.ontrack = (event) => {
-        console.log("Received remote track:", event.track.kind);
+        console.log("Received remote audio track");
         const [remoteStream] = event.streams;
-        setRemoteStream(remoteStream);
-        if (remoteVideoRef.current) {
-          remoteVideoRef.current.srcObject = remoteStream;
+        if (audioRef.current) {
+          audioRef.current.srcObject = remoteStream;
         }
         setCallStatus("connected");
         toast.success("Звонок подключен");
@@ -150,7 +150,7 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, isInit
 
     } catch (error) {
       console.error("Error initializing call:", error);
-      toast.error("Не удалось получить доступ к камере/микрофону");
+      toast.error("Не удалось получить доступ к микрофону");
       onClose();
     }
   };
@@ -180,7 +180,7 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, isInit
   const subscribeToSignaling = async (pc: RTCPeerConnection) => {
     return new Promise<void>((resolve) => {
       const channel = supabase
-        .channel(`video-call-${chatId}`)
+        .channel(`audio-call-${chatId}`)
         .on("broadcast", { event: "signaling" }, async ({ payload }) => {
           if (payload.to !== currentUserId) return;
 
@@ -231,15 +231,6 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, isInit
     }
   };
 
-  const toggleVideo = () => {
-    if (localStream) {
-      localStream.getVideoTracks().forEach((track) => {
-        track.enabled = !track.enabled;
-      });
-      setIsVideoOff(!isVideoOff);
-    }
-  };
-
   const handleEndCall = () => {
     if (channelRef.current) {
       sendSignalingMessage({ type: "end-call" });
@@ -263,7 +254,6 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, isInit
       clearInterval(callTimerRef.current);
     }
     setLocalStream(null);
-    setRemoteStream(null);
     setPeerConnection(null);
     setCallStatus("ended");
     setCallDuration(0);
@@ -271,46 +261,28 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, isInit
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && handleEndCall()}>
-      <DialogContent className="max-w-4xl">
+      <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle className="flex items-center justify-between">
-            <span>Видеозвонок</span>
-            <span className="text-sm font-normal text-muted-foreground">
-              {callStatus === "connecting" && "Соединение..."}
-              {callStatus === "connected" && formatCallDuration(callDuration)}
-            </span>
+          <DialogTitle>
+            Голосовой звонок
           </DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* Удаленное видео */}
-            <div className="relative aspect-video bg-secondary rounded-lg overflow-hidden">
-              <video
-                ref={remoteVideoRef}
-                autoPlay
-                playsInline
-                className="w-full h-full object-cover"
-              />
-              {!remoteStream && (
-                <div className="absolute inset-0 flex items-center justify-center text-muted-foreground">
-                  Ожидание подключения...
-                </div>
-              )}
-            </div>
-
-            {/* Локальное видео */}
-            <div className="relative aspect-video bg-secondary rounded-lg overflow-hidden">
-              <video
-                ref={localVideoRef}
-                autoPlay
-                playsInline
-                muted
-                className="w-full h-full object-cover"
-              />
-              <div className="absolute bottom-2 left-2 text-xs text-white bg-black/50 px-2 py-1 rounded">
-                Вы
-              </div>
+        <div className="space-y-6 py-8">
+          {/* Аватар собеседника */}
+          <div className="flex flex-col items-center gap-4">
+            <Avatar className="w-24 h-24">
+              <AvatarFallback className="bg-primary/10 text-primary text-3xl">
+                {otherUserName.charAt(0).toUpperCase()}
+              </AvatarFallback>
+            </Avatar>
+            <div className="text-center">
+              <h3 className="text-xl font-semibold">{otherUserName}</h3>
+              <p className="text-sm text-muted-foreground">
+                {callStatus === "connecting" && "Соединение..."}
+                {callStatus === "connected" && formatCallDuration(callDuration)}
+                {callStatus === "ended" && "Звонок завершен"}
+              </p>
             </div>
           </div>
 
@@ -320,33 +292,28 @@ const VideoCall = ({ isOpen, onClose, chatId, currentUserId, otherUserId, isInit
               variant={isMuted ? "destructive" : "secondary"}
               size="icon"
               onClick={toggleMute}
-              className="rounded-full w-12 h-12"
+              className="rounded-full w-16 h-16"
+              disabled={callStatus !== "connected"}
             >
-              {isMuted ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
-            </Button>
-
-            <Button
-              variant={isVideoOff ? "destructive" : "secondary"}
-              size="icon"
-              onClick={toggleVideo}
-              className="rounded-full w-12 h-12"
-            >
-              {isVideoOff ? <VideoOff className="w-5 h-5" /> : <VideoIcon className="w-5 h-5" />}
+              {isMuted ? <MicOff className="w-6 h-6" /> : <Mic className="w-6 h-6" />}
             </Button>
 
             <Button
               variant="destructive"
               size="icon"
               onClick={handleEndCall}
-              className="rounded-full w-12 h-12"
+              className="rounded-full w-16 h-16"
             >
-              <PhoneOff className="w-5 h-5" />
+              <PhoneOff className="w-6 h-6" />
             </Button>
           </div>
         </div>
+
+        {/* Скрытый audio элемент для воспроизведения удаленного аудио */}
+        <audio ref={audioRef} autoPlay />
       </DialogContent>
     </Dialog>
   );
 };
 
-export default VideoCall;
+export default AudioCall;
